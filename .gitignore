@@ -1,0 +1,8 @@
+config.py
+state.json
+log_eu.txt
+log_us.txt
+run_log.txt
+__pycache__/
+*.pyc
+*.pyo
