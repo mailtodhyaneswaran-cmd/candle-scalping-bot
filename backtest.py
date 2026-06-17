@@ -64,10 +64,13 @@ def _window_bounds(day: datetime, window):
 
 def fetch_ibkr(spec: SymbolSpec, days: int, window):
     from ib_async import IB, Stock
+    print(f"  Connecting to IBKR (TWS port 7497)...")
     ib = IB()
     ib.connect("127.0.0.1", 7497, clientId=77)  # paper port; read-only is fine
+    print(f"  Connected. Qualifying contract {spec.symbol} on {spec.exchange}...")
     contract = Stock(spec.symbol, spec.exchange, spec.currency)
     ib.qualifyContracts(contract)
+    print(f"  Contract OK. Fetching {days} trading days of 1-min bars...")
 
     out = {}  # date_str -> list[Bar]
     today = datetime.now(NL)
@@ -79,6 +82,8 @@ def fetch_ibkr(spec: SymbolSpec, days: int, window):
         if day.weekday() >= 5:
             continue
         start, end = _window_bounds(day, window)
+        date_str = day.strftime("%Y-%m-%d")
+        print(f"  [{fetched+1:>3}/{days}] {date_str} ... ", end="", flush=True)
         bars = ib.reqHistoricalData(
             contract, endDateTime=end, durationStr="3600 S",
             barSizeSetting="1 min", whatToShow="TRADES",
@@ -90,13 +95,18 @@ def fetch_ibkr(spec: SymbolSpec, days: int, window):
             if start <= t <= end:
                 rows.append(Bar(t.strftime("%H:%M"), b.open, b.high, b.low, b.close, b.volume))
         if len(rows) >= 6:
-            out[day.strftime("%Y-%m-%d")] = rows
+            out[date_str] = rows
             fetched += 1
+            print(f"{len(rows)} bars")
+        else:
+            print(f"skipped (only {len(rows)} bars — holiday/early close?)")
+    print(f"  Done. {fetched} days fetched. Disconnecting...")
     ib.disconnect()
     return out
 
 
 def load_csv(spec: SymbolSpec, directory: str):
+    print(f"  Loading CSV files for {spec.symbol} from {directory}/ ...")
     out = {}
     for fn in sorted(os.listdir(directory)):
         if not fn.startswith(spec.symbol + "_") or not fn.endswith(".csv"):
@@ -109,6 +119,10 @@ def load_csv(spec: SymbolSpec, directory: str):
                                 float(r["low"]), float(r["close"]), float(r["volume"])))
         if len(rows) >= 6:
             out[date_str] = rows
+            print(f"    {fn}  ({len(rows)} bars)")
+        else:
+            print(f"    {fn}  skipped — too few bars")
+    print(f"  {len(out)} days loaded from CSV.")
     return out
 
 
@@ -119,6 +133,7 @@ def run_symbol(spec, days_bars, capital, params):
     cross-day degeneracy where every day spikes at the same minute. Swap in your
     live get_rvol baseline here if you want exact parity."""
     trades = []
+    print(f"  Simulating {len(days_bars)} days...")
     for date_str, rows in sorted(days_bars.items()):
         opening = rows[:5]                       # 09:00–09:04
         post = rows[5:]                           # 09:05 onward
@@ -134,6 +149,13 @@ def run_symbol(spec, days_bars, capital, params):
         tr = simulate_session(post, oh, ol, capital, params, rvol_of=rvol_of)
         if tr:
             trades.append((date_str, tr))
+            icon = "✅" if tr.net_pnl > 0 else "❌"
+            print(f"    {date_str}  range {ol:.2f}–{oh:.2f}  "
+                  f"{tr.direction:5}  entry {tr.entry:.2f}  "
+                  f"exit {tr.exit_price:.2f} ({tr.exit_reason:12})  "
+                  f"net {tr.net_pnl:+.2f}  {icon}")
+        else:
+            print(f"    {date_str}  range {ol:.2f}–{oh:.2f}  no setup")
     return trades
 
 
@@ -172,9 +194,11 @@ def main():
     rows = []
     for s in args.symbols:
         spec = SymbolSpec.parse(s)
+        print(f"\n{'─'*55}\n  {spec.symbol}  ({spec.exchange} / {spec.currency})\n{'─'*55}")
         data = load_csv(spec, args.csv) if args.csv else fetch_ibkr(spec, args.days, window)
         trades = run_symbol(spec, data, args.capital, params)
         rows.append(summarize(spec, trades, len(data)))
+        print(f"  → {len(trades)} trade(s) out of {len(data)} days")
 
     hdr = f"{'symbol':8} {'days':>4} {'trades':>6} {'win%':>6} {'avgR':>6} {'totR':>7} {'net':>9} {'PF':>5}  tp/sl/re"
     print("\n" + hdr); print("-" * len(hdr))
