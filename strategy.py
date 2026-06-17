@@ -21,6 +21,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import config
+from strategy_core import simulate_session, position_size, Params
 from ibkr_connector import (
     connect, get_contract,
     get_opening_range_bar, get_latest_closed_1min_bar, get_rvol,
@@ -127,7 +128,7 @@ def monitor_bracket(ib, contract, trades, direction: str,
 
 def run_session(session) -> None:
     state     = load_state()
-    state_key = f"{session.symbol.lower()}_trade_taken"
+    state_key = f"{session.name}_trade_taken"
     session_end = today_at(session.session_end)
 
     if datetime.now(NL) >= session_end:
@@ -168,6 +169,12 @@ def run_session(session) -> None:
 
     opening_high = opening_bar.high
     opening_low  = opening_bar.low
+    price_ref = (opening_high + opening_low) / 2
+    if (opening_high - opening_low) < config.MIN_RANGE_PCT * price_ref:
+        send_message(f"😴 {session.symbol} range too thin — skipping")
+        ib.disconnect()
+        return
+    tol = tol_PCT * price_ref
     print(f"  Opening range: {opening_low:.2f} – {opening_high:.2f} {session.currency}")
     send_message(
         f"📊 {session.symbol} range drawn: "
@@ -231,11 +238,11 @@ def run_session(session) -> None:
         # ── Retest detection ──────────────────────────────────────────────────
         else:
             if direction == "long":
-                touched   = bar.low  <= breakout_level + config.RETEST_TOLERANCE
+                touched   = bar.low  <= breakout_level + tol
                 rejection = bar.close > breakout_level   # closes back above level ✅
                 failure   = bar.close < opening_low      # closes back inside range ❌
             else:
-                touched   = bar.high >= breakout_level - config.RETEST_TOLERANCE
+                touched   = bar.high >= breakout_level - tol
                 rejection = bar.close < breakout_level   # closes back below level ✅
                 failure   = bar.close > opening_high     # closes back inside range ❌
 
@@ -246,7 +253,10 @@ def run_session(session) -> None:
 
             if touched and rejection:
                 entry_price = breakout_level
-                qty         = max(1, int(session.capital / entry_price))
+                qty         = position_size(session.capital, entry_price)
+                if qty == 0:
+                    send_message(f"⚠️ {session.symbol} skipped — 1 share exceeds capital cap")
+                    break
 
                 if direction == "long":
                     action      = "BUY"

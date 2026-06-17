@@ -22,13 +22,15 @@ TELEGRAM_BOT_TOKEN = "YOUR_BOT_TOKEN"
 TELEGRAM_CHAT_ID   = "YOUR_CHAT_ID"
 
 # ── Strategy parameters ──────────────────────────────────────────────────────
-RETEST_TOLERANCE  = 0.05   # price must come within this of the broken level
-RISK_REWARD_RATIO = 2      # take profit = entry +/- (RR * risk)
-POLL_INTERVAL_SEC = 60     # seconds between 1-min bar polls
-RVOL_MIN          = 1.5    # minimum relative volume for a valid breakout
+RETEST_TOLERANCE_PCT = 0.0005  # 5 bps of price (replaces fixed 0.05)
+MIN_RANGE_PCT        = 0.0015  # skip days where range < 0.15% of price
+RISK_REWARD_RATIO    = 2       # take profit = entry +/- (RR * risk)
+POLL_INTERVAL_SEC    = 60      # seconds between 1-min bar polls
+RVOL_MIN             = 1.5     # minimum relative volume for a valid breakout
 
 # ── Sessions (all times in Netherlands/Amsterdam local time, CEST) ────────────
 EU_SESSION = SimpleNamespace(
+    name          = "eu",
     symbol        = "VUSA",    # Vanguard S&P 500 UCITS ETF — Euronext Amsterdam
     exchange      = "AEB",     # Alternative: EXS1 on XETRA (exchange="XETRA")
     currency      = "EUR",
@@ -39,6 +41,7 @@ EU_SESSION = SimpleNamespace(
 )
 
 US_SESSION = SimpleNamespace(
+    name          = "us",
     symbol        = "PLTR",    # Palantir — high intraday volatility
     exchange      = "SMART",   # Alternative: TSLA (exchange="SMART", currency="USD")
     currency      = "USD",
