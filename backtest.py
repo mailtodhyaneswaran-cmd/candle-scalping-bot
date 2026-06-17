@@ -127,13 +127,14 @@ def load_csv(spec: SymbolSpec, directory: str):
 
 
 # ───────────────────────── run one symbol ─────────────────────────
-def run_symbol(spec, days_bars, capital, params):
+def run_symbol(spec, days_bars, capital, params, no_rvol=False):
     """RVOL proxy = breakout bar volume / median volume of that day's opening-range
     bars (i.e. is volume expanding vs the pre-breakout baseline). This avoids the
     cross-day degeneracy where every day spikes at the same minute. Swap in your
     live get_rvol baseline here if you want exact parity."""
     trades = []
-    print(f"  Simulating {len(days_bars)} days...")
+    rvol_label = " (RVOL gate OFF)" if no_rvol else ""
+    print(f"  Simulating {len(days_bars)} days{rvol_label}...")
     for date_str, rows in sorted(days_bars.items()):
         opening = rows[:5]                       # 09:00–09:04
         post = rows[5:]                           # 09:05 onward
@@ -143,8 +144,7 @@ def run_symbol(spec, days_bars, capital, params):
         ol = min(b.low for b in opening)
         base_vol = statistics.median([b.volume for b in opening]) or 1.0
 
-        def rvol_of(i, bar, _bv=base_vol):
-            return bar.volume / _bv
+        rvol_of = None if no_rvol else (lambda _, bar, _bv=base_vol: bar.volume / _bv)
 
         tr = simulate_session(post, oh, ol, capital, params, rvol_of=rvol_of)
         if tr:
@@ -184,6 +184,7 @@ def main():
     ap.add_argument("--days", type=int, default=60)
     ap.add_argument("--capital", type=float, default=500)
     ap.add_argument("--csv", default=None, help="directory of SYMBOL_DATE.csv files")
+    ap.add_argument("--no-rvol", action="store_true", help="bypass RVOL gate (diagnosis only)")
     ap.add_argument("--us", action="store_true", help="use the US window instead of EU")
     ap.add_argument("--symbols", nargs="+",
                     default=["VUSA:AEB:EUR", "ASML:AEB:EUR", "EXS1:IBIS:EUR"])
@@ -196,7 +197,7 @@ def main():
         spec = SymbolSpec.parse(s)
         print(f"\n{'─'*55}\n  {spec.symbol}  ({spec.exchange} / {spec.currency})\n{'─'*55}")
         data = load_csv(spec, args.csv) if args.csv else fetch_ibkr(spec, args.days, window)
-        trades = run_symbol(spec, data, args.capital, params)
+        trades = run_symbol(spec, data, args.capital, params, no_rvol=args.no_rvol)
         rows.append(summarize(spec, trades, len(data)))
         print(f"  → {len(trades)} trade(s) out of {len(data)} days")
 
