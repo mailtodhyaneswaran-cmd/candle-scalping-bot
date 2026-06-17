@@ -85,7 +85,7 @@ def fetch_ibkr(spec: SymbolSpec, days: int, window):
         date_str = day.strftime("%Y-%m-%d")
         print(f"  [{fetched+1:>3}/{days}] {date_str} ... ", end="", flush=True)
         bars = ib.reqHistoricalData(
-            contract, endDateTime=end, durationStr="3600 S",
+            contract, endDateTime=end, durationStr="7200 S",
             barSizeSetting="1 min", whatToShow="TRADES",
             useRTH=False, formatDate=2,
         )
