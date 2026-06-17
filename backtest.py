@@ -81,9 +81,9 @@ def fetch_ibkr(spec: SymbolSpec, days: int, window) -> dict:
             continue
         start, end = _window_bounds(day, window)
         bars = ib.reqHistoricalData(
-            contract, endDateTime=end, durationStr="3600 S",
+            contract, endDateTime=end, durationStr="7200 S",
             barSizeSetting="1 min", whatToShow="TRADES",
-            useRTH=False, formatDate=2,
+            useRTH=False, formatDate=2,  # 7200 S = 2 h; trimmed to window by filter below
         )
         rows = []
         for b in bars:
