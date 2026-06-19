@@ -142,13 +142,21 @@ def run_session(session) -> None:
         return
 
     # ── Connect ──────────────────────────────────────────────────────────────
+    label = 'EU' if session.name == 'eu' else 'US'
     print(f"\n{'='*55}\n {session.symbol} session | "
           f"window: {session.opening_end}–{session.session_end} NL\n{'='*55}")
     send_message(
-        f"🔔 {'EU' if session.name == 'eu' else 'US'} session starting "
+        f"🔔 {label} session starting "
         f"— watching {session.symbol} {session.opening_start} candle"
     )
-    ib       = connect()
+    try:
+        ib = connect()
+    except Exception as e:
+        msg = (f"🔴 {label} session — IBKR connection failed: {type(e).__name__}\n"
+               f"Is TWS running and logged in? Is clientId {config.IBKR_CLIENT_ID} free?")
+        print(msg)
+        send_message(msg)
+        return
     contract = get_contract(session.symbol, session.exchange, session.currency)
 
     # ── Wait for opening candle to close ─────────────────────────────────────
